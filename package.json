@@ -4,6 +4,7 @@
   "description": "testing some stuff",
   "main": "index.js",
   "scripts": {
+    "start": "nodemon huhu.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon huhu.js"
   },
