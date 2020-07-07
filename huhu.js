@@ -6,7 +6,7 @@ const app = express();
 
 app.use(express.json());
 app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({extended: true}));
+app.use(bodyParser.urlencoded({ extended: true }));
 
 //PORT
 const port = process.env.PORT || 3000;
@@ -126,7 +126,7 @@ MongoClient.connect(url, { useUnifiedTopology: true })
 
         //get user location
         app.get('/userGPS/:id', async (req, res) => {
-            const user = await db.collection('user-GPS').findOne({ id: req.params.id });
+            const user = await userGPSCollection.findOne({ id: req.params.id });
             if (user) {
                 res.json({
                     id: user.id,
@@ -138,26 +138,31 @@ MongoClient.connect(url, { useUnifiedTopology: true })
             }
         });
 
-        //upadte user location
-        app.put('/userGPS', (req, res) => {
+        // update user location
+        app.put('/userGPS', async (req, res) => {
             const updateid = req.body.id;
             const updatelat = req.body.latitude;
             const updatelong = req.body.longitude;
-            userGPSCollection.findOneAndUpdate(
-                {id: updateid},
-                {
-                    $set: {
-                        latitude: updatelat,
-                        longitude: updatelong
+            let userGPS = await userGPSCollection.findOne({ id: updateid })
+            if (userGPS) {
+                await userGPSCollection.findOneAndUpdate(
+                    { id: updateid },
+                    {
+                        $set: {
+                            latitude: updatelat,
+                            longitude: updatelong
+                        }
                     }
-                }
-            )
-            .then(result => {
-                res.send(result);
-            })
-            .catch(error => {
-                res.send(error);
-            })
+                )
+            } else {
+                await userGPSCollection.insertOne({
+                    id: updateid,
+                    latitude: updatelat,
+                    longitude: updatelong
+                })
+            }
+            userGPS = await userGPSCollection.findOne({ id: updateid })
+            res.json(userGPS) 
         });
 
         //report traffic condition
@@ -190,19 +195,19 @@ MongoClient.connect(url, { useUnifiedTopology: true })
             const updateid = req.body.id;
             const bonus = parseInt(req.body.bonus);
             userInfoCollection.findOneAndUpdate(
-                {id: updateid},
+                { id: updateid },
                 {
                     $inc: {
                         point: bonus
                     }
                 }
             )
-            .then(result => {
-                res.send(result);
-            })
-            .catch(error => {
-                res.send(error);
-            })
+                .then(result => {
+                    res.send(result);
+                })
+                .catch(error => {
+                    res.send(error);
+                })
         });
 
         app.get('/', (req, res) => {
