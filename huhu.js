@@ -20,12 +20,13 @@ MongoClient.connect(url, { useUnifiedTopology: true })
     .then(client => {
         console.log('Connected to Database');
         const db = client.db('app-data');
-        //reported traffic condition includes location, condition, time, ...
-        const conditionsCollection = db.collection('traffic-conditions');
         //user's genaral info includes personal info, id, password, contact, awarded points...
         const userInfoCollection = db.collection('user-info');
         //user's GPS includes user's id, longitude & latitude
         const userGPSCollection = db.collection('user-GPS');
+        //reported traffic condition includes location, condition, time, ...
+        const conditionsCollection = db.collection('traffic-conditions');
+        db.collection('traffic-conditions').createIndex({ "created": 1 }, { expireAfterSeconds: 1800 })
 
         //CRUD operations
         //add new editor
@@ -45,7 +46,6 @@ MongoClient.connect(url, { useUnifiedTopology: true })
                     }
                     return userGPSCollection.insertOne({
                         id: result.ops[0].id,
-                        monngoid: result.ops[0]._id,
                         longitude: '',
                         latitude: ''
                     })
@@ -73,7 +73,7 @@ MongoClient.connect(url, { useUnifiedTopology: true })
                             password,
                             name,
                             type: 'CTV',
-                            point: 0
+                            reputation_point: 0
                         })
                         .then(result => {
                             //console.log(rs.ops[0].id);
@@ -82,7 +82,6 @@ MongoClient.connect(url, { useUnifiedTopology: true })
                             }
                             return userGPSCollection.insertOne({
                                 id: result.ops[0].id,
-                                monngoid: result.ops[0]._id,
                                 latitude: '',
                                 longitude: ''
                             })
@@ -110,14 +109,14 @@ MongoClient.connect(url, { useUnifiedTopology: true })
         });
 
         //get user info
-        app.get('/userinfos/:id', async (req, res) => {
+        app.get('/userinfo/:id', async (req, res) => {
             const user = await db.collection('user-info').findOne({ id: req.params.id });
             if (user) {
                 res.json({
                     id: user.id,
                     name: user.name,
                     type: user.type,
-                    point: user.point
+                    reputation_point: user.reputation_point
                 });
             } else {
                 res.send(`User with id: ${req.params.id} was not found.`);
@@ -162,7 +161,7 @@ MongoClient.connect(url, { useUnifiedTopology: true })
                 })
             }
             userGPS = await userGPSCollection.findOne({ id: updateid })
-            res.json(userGPS) 
+            res.json(userGPS)
         });
 
         //report traffic condition
@@ -172,7 +171,9 @@ MongoClient.connect(url, { useUnifiedTopology: true })
             const long = req.body.longitude;
             const lat = req.body.latitude;
             const stt = req.body.status;
+            const reporter = req.body.id;
             conditionsCollection.insertOne({
+                created: new Date(),
                 longitude: long,
                 latitude: lat,
                 status: stt,
@@ -185,20 +186,18 @@ MongoClient.connect(url, { useUnifiedTopology: true })
                 .catch(error => console.error(error))
         });
 
-        //update traffic condition
-        app.put('/conditions', (req, res) => {
-
-        });
-
         //award points to user
-        app.put('/userinfo', (req, res) => {
+        app.put('/userinfo/point', (req, res) => {
             const updateid = req.body.id;
             const bonus = parseInt(req.body.bonus);
             userInfoCollection.findOneAndUpdate(
-                { id: updateid },
+                { 
+                    id: updateid,
+                    type: 'CTV'
+                },
                 {
                     $inc: {
-                        point: bonus
+                        reputation_point: bonus
                     }
                 }
             )
