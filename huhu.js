@@ -142,6 +142,19 @@ MongoClient.connect(url, { useUnifiedTopology: true })
             }
         });
 
+        //get users location
+        app.get('/userGPSs', async (req, res) => {
+            const userLocations = await userGPSCollection.find({
+                latitude: {
+                    $ne: ""
+                },
+                longitude: {
+                    $ne: ""
+                },
+            }).toArray();
+            res.json({userLocations })
+        });
+
         // update user location
         app.put('/userGPS', async (req, res) => {
             const updateid = req.body.id;
