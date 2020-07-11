@@ -107,9 +107,9 @@ MongoClient.connect(url, { useUnifiedTopology: true })
             const { id, password } = req.body;
             const user = await userInfoCollection.findOne({ id, password });
             if (user) {
-                res.json({ success: true });
+                res.json({ success: true, user });
             } else {
-                res.json({ success: false });
+                res.json({ success: false, user: null });
             }
         });
 
