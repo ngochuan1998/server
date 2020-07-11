@@ -20,13 +20,18 @@ MongoClient.connect(url, { useUnifiedTopology: true })
     .then(client => {
         console.log('Connected to Database');
         const db = client.db('app-data');
-        //user's genaral info includes personal info, id, password, contact, awarded points...
+
+        //create collections
+        //user's genaral info includes personal info, id, password, reputation points
         const userInfoCollection = db.collection('user-info');
-        //user's GPS includes user's id, longitude & latitude
+        //user's GPS includes user's id, latitude and longitude
         const userGPSCollection = db.collection('user-GPS');
-        //reported traffic condition includes location, condition, time, ...
+        //reported traffic condition includes location, condition, time, reporter id
         const conditionsCollection = db.collection('traffic-conditions');
-        db.collection('traffic-conditions').createIndex({ "created": 1 }, { expireAfterSeconds: 1800 })
+        //automatically remove report after 30 minutes
+        db.collection('traffic-conditions').createIndex({ "created": 1 }, { expireAfterSeconds: 1800 });
+        //message collection
+        const messageCollection = db.collection('messages');
 
         //CRUD operations
         //add new editor
@@ -58,7 +63,7 @@ MongoClient.connect(url, { useUnifiedTopology: true })
                 })
         });
 
-        //register new user using phone number
+        //register new user using phone number as id/username
         app.post('/signup/CTV', async (req, res) => {
             const { id, password, name } = req.body;
             db.collection('user-info').find({ 'id': id }).count((err, number) => {
@@ -116,7 +121,7 @@ MongoClient.connect(url, { useUnifiedTopology: true })
                     id: user.id,
                     name: user.name,
                     type: user.type,
-                    reputation_point: user.reputation_point
+                    point: user.point
                 });
             } else {
                 res.send(`User with id: ${req.params.id} was not found.`);
@@ -164,36 +169,14 @@ MongoClient.connect(url, { useUnifiedTopology: true })
             res.json(userGPS)
         });
 
-        //report traffic condition
-        app.post('/conditions', (req, res) => {
-            const today = new Date();
-            const date_Time = today.getFullYear() + '-' + (today.getMonth() + 1) + '-' + today.getDate() + ' ' + today.getHours() + ":" + today.getMinutes() + ":" + today.getSeconds();
-            const long = req.body.longitude;
-            const lat = req.body.latitude;
-            const stt = req.body.status;
-            const reporter = req.body.id;
-            conditionsCollection.insertOne({
-                created: new Date(),
-                longitude: long,
-                latitude: lat,
-                status: stt,
-                date_time: date_Time
-            })
-                .then(result => {
-                    //res.send('Added new traffic condition info to database');
-                    res.json(result.ops);
-                })
-                .catch(error => console.error(error))
-        });
-
-        //award points to user
-        app.put('/userinfo/point', (req, res) => {
+        //award reputation points to user
+        app.put('/userinfo/reputation', (req, res) => {
             const updateid = req.body.id;
             const bonus = parseInt(req.body.bonus);
             userInfoCollection.findOneAndUpdate(
-                { 
+                {
                     id: updateid,
-                    type: 'CTV'
+                    type: "CTV"
                 },
                 {
                     $inc: {
@@ -209,9 +192,83 @@ MongoClient.connect(url, { useUnifiedTopology: true })
                 })
         });
 
-        app.get('/', (req, res) => {
-            console.log('Welcome!');
-            res.send('Welcome!');
+        //report traffic condition
+        app.post('/conditions', (req, res) => {
+            const today = new Date();
+            const date_Time = today.getFullYear() + '-' + (today.getMonth() + 1) + '-' + today.getDate() + ' ' + today.getHours() + ":" + today.getMinutes() + ":" + today.getSeconds();
+            const long = req.body.longitude;
+            const lat = req.body.latitude;
+            const stt = req.body.status;
+            const reporter_id = req.body.id;
+            conditionsCollection.insertOne({
+                created: new Date(),
+                longitude: long,
+                latitude: lat,
+                status: stt,
+                date_time: date_Time,
+                reporter: reporter_id
+            })
+                .then(result => {
+                    res.send('Submitted new traffic condition report to database');
+                    //res.json(result.ops);
+                })
+                .catch(error => console.error(error))
+        });
+
+        //get traffic conditions in collection
+        app.get('/conditions', (req, res) => {
+            db.collection('traffic-conditions').find().toArray()
+                .then(result => {
+                    res.json(result);
+                })
+                .catch(error => {
+                    res.json(error);
+                })
+        })
+
+        //post new message
+        app.post('/messages', async (req, res) => {
+            const today = new Date();
+            const date_Time = today.getFullYear() + '-' + (today.getMonth() + 1) + '-' + today.getDate() + ' ' + today.getHours() + ":" + today.getMinutes() + ":" + today.getSeconds();
+            const message = req.body.message;
+            const send_id = req.body.send_id;
+            const receive_id = req.body.receive_id;
+            const destination = await db.collection('user-info').findOne({ id: receive_id });
+            if (destination) {
+                db.collection('messages').insertOne({
+                    message: message,
+                    send_id: send_id,
+                    receive_id: receive_id,
+                    date_time: date_Time,
+                    read: false
+                })
+                    .then(result => {
+                        res.json('Submitted new message to database');
+                        //res.json(result.ops);
+                    })
+                    .catch(error => console.error(error))
+            } else {
+                res.json('Invalid receiver.');
+            }
+        });
+
+        //get user's received messages
+        app.get('/messages/:id', async (req, res) => {
+            const user = await userInfoCollection.findOne({ id: req.params.id });
+            if (user) {
+                const message = await messageCollection.findOne({ receive_id: req.params.id });
+                if (message) {
+                    res.json({
+                        sender: message.send_id,
+                        message: message.message,
+                        date_Time: message.date_Time
+                    });
+                } else {
+                    res.send(`Received 0 message.`);
+                }
+            } else {
+                res.json(`User with id ${req.params.id} cannot be found.`)
+            }
         });
     })
     .catch(error => {
